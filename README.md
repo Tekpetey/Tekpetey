@@ -1,7 +1,7 @@
 - 👋 Hi, I’m @Tekpetey
 - 👀 I’m interested in ...learning to code for my electrical career.
 - 🌱 I’m currently learning ...python
-- 💞️ I’m looking to collaborate on ...anything python can offer
+- 💞️ I’m looking to collaborate on smart grid, renewable energy integration, load flow analysis, demand side management and anything related
 - 📫 How to reach me ...tekpetey.martin@gmail.com, +233209491797(whatsapp, telegram)
 - 😄 Pronouns: ...
 - ⚡ Fun fact: ...i'm terrible at coding.
