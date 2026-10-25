@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Solar PV Sizer</title>
+  <meta name="description" content="Size off-grid, hybrid and grid-tied solar PV systems with monthly irradiance from NASA POWER or Open-Meteo.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='7' fill='%23e8a317'/%3E%3Cg stroke='%23e8a317' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M16 2v4M16 26v4M2 16h4M26 16h4M6 6l3 3M23 23l3 3M6 26l3-3M23 9l3-3'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <div>
+        <h1>Solar PV Sizer</h1>
+        <p class="tagline">Size panels, batteries, controller and inverter from your loads and local sunshine.</p>
+      </div>
+      <div class="header-actions">
+        <input id="project-name" class="project-name" aria-label="Project name" value="My solar project">
+        <button type="button" id="btn-save" class="btn">Export</button>
+        <label class="btn">Import<input type="file" id="file-import" accept="application/json,.json" hidden></label>
+        <button type="button" id="btn-print" class="btn">Print report</button>
+        <button type="button" id="btn-reset" class="btn btn-quiet">New project</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap layout">
+    <div class="inputs">
+      <!-- 1. Location & irradiance -->
+      <section class="card" id="sec-location">
+        <h2><span class="step">1</span> Location &amp; solar resource</h2>
+        <div class="grid-2">
+          <label class="field">Preset location
+            <select id="preset"><option value="">Choose a place…</option></select>
+          </label>
+          <form class="field" id="search-form" autocomplete="off">
+            <label for="search">Search any place</label>
+            <div class="inline">
+              <input id="search" type="search" placeholder="e.g. Kintampo">
+              <button type="submit" class="btn">Search</button>
+            </div>
+            <ul id="search-results" class="search-results" hidden></ul>
+          </form>
+        </div>
+        <div class="grid-3">
+          <label class="field">Site name<input id="loc-name" type="text"></label>
+          <label class="field">Latitude (°)<input id="lat" type="number" step="0.0001" min="-90" max="90"></label>
+          <label class="field">Longitude (°)<input id="lon" type="number" step="0.0001" min="-180" max="180"></label>
+        </div>
+        <div id="map" class="map" role="application" aria-label="Map: click to set the site location"></div>
+        <p class="hint">Click the map, use <button type="button" id="btn-geolocate" class="link-btn">my location</button>, pick a preset or search.</p>
+
+        <div class="fetch-row">
+          <label class="field">Data source
+            <select id="source"></select>
+          </label>
+          <button type="button" id="btn-fetch" class="btn btn-primary">Get irradiance</button>
+          <button type="button" id="btn-refresh" class="btn" title="Ignore the saved copy and download again">Refresh</button>
+        </div>
+        <p id="irr-status" class="status" role="status" aria-live="polite"></p>
+
+        <div class="table-scroll">
+          <table class="irr-table">
+            <thead><tr><th scope="row">Month</th></tr></thead>
+            <tbody>
+              <tr id="row-ghi"><th scope="row" title="Global horizontal irradiance = peak sun hours">GHI <small>kWh/m²/day</small></th></tr>
+              <tr id="row-temp"><th scope="row">Air temp <small>°C</small></th></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="hint">Values are editable: type in figures from a site survey or another source. Cross-check: <span id="ref-links"></span></p>
+      </section>
+
+      <!-- 2. Loads -->
+      <section class="card" id="sec-loads">
+        <h2><span class="step">2</span> Electrical loads</h2>
+        <div class="table-scroll">
+          <table class="load-table">
+            <thead>
+              <tr><th>Appliance</th><th>Watts</th><th>Qty</th><th>Hours/day</th><th title="Start-up surge multiplier">Surge ×</th><th title="Wired to the DC bus">DC</th><th>Wh/day</th><th><span class="sr-only">Remove</span></th></tr>
+            </thead>
+            <tbody id="load-body"></tbody>
+            <tfoot>
+              <tr><th colspan="6">Total</th><td id="load-total" class="num"></td><td></td></tr>
+            </tfoot>
+          </table>
+        </div>
+        <div class="inline add-row">
+          <select id="appliance-preset" aria-label="Appliance preset"></select>
+          <button type="button" id="btn-add-load" class="btn">Add appliance</button>
+        </div>
+      </section>
+
+      <!-- 3. System -->
+      <section class="card" id="sec-system">
+        <h2><span class="step">3</span> System design</h2>
+        <fieldset class="modes">
+          <legend>System type</legend>
+          <label><input type="radio" name="mode" value="offgrid"> <strong>Off-grid</strong><span>Battery supplies all night-time and cloudy-day use</span></label>
+          <label><input type="radio" name="mode" value="hybrid"> <strong>Hybrid / backup</strong><span>Grid connected, battery covers outages</span></label>
+          <label><input type="radio" name="mode" value="gridtied"> <strong>Grid-tied</strong><span>No battery, PV offsets grid consumption</span></label>
+        </fieldset>
+
+        <div class="grid-3" id="system-fields">
+          <label class="field" data-modes="offgrid">Design for
+            <select data-key="designBasis"><option value="worst">Worst month</option><option value="average">Annual average</option></select>
+          </label>
+          <label class="field" data-modes="offgrid hybrid">System voltage
+            <select data-key="systemVoltage" data-type="number"><option>12</option><option>24</option><option>48</option></select>
+          </label>
+          <label class="field" data-modes="offgrid">Days of autonomy<input data-key="autonomyDays" type="number" min="0" step="0.5"></label>
+          <label class="field" data-modes="hybrid">Backup hours<input data-key="backupHours" type="number" min="0" step="1"></label>
+          <label class="field" data-modes="hybrid gridtied">PV share of use (%)<input data-key="offsetPercent" type="number" min="0" max="300" step="5"></label>
+          <label class="field" data-modes="gridtied">DC/AC ratio<input data-key="dcAcRatio" type="number" min="0.8" max="1.5" step="0.05"></label>
+        </div>
+
+        <h3>Panels</h3>
+        <div class="grid-3">
+          <label class="field">Panel rating (Wp)<input data-key="panelWatts" type="number" min="10" step="5"></label>
+          <label class="field">Panels per string<input data-key="panelsPerString" type="number" min="1" step="1"></label>
+          <label class="field" data-modes="offgrid">Panel Isc (A)<input data-key="panelIsc" type="number" min="0" step="0.1"></label>
+          <label class="field">Temp. coefficient (%/°C)<input data-key="tempCoeff" type="number" max="0" step="0.01"></label>
+          <label class="field">Cell temp. rise (°C)<input data-key="cellTempRise" type="number" min="0" step="1"></label>
+          <label class="field">Tilt gain factor<input data-key="tiltFactor" type="number" min="0.5" max="1.5" step="0.01"></label>
+        </div>
+
+        <h3>Losses &amp; efficiencies</h3>
+        <div class="grid-3">
+          <label class="field">Soiling / dust (%)<input data-key="soilingLoss" type="number" min="0" max="50" step="0.5"></label>
+          <label class="field">Wiring (%)<input data-key="wiringLoss" type="number" min="0" max="20" step="0.5"></label>
+          <label class="field">Mismatch (%)<input data-key="mismatchLoss" type="number" min="0" max="20" step="0.5"></label>
+          <label class="field">Inverter efficiency (%)<input data-key="inverterEfficiency" type="number" min="50" max="100" step="0.5"></label>
+          <label class="field" data-modes="offgrid hybrid gridtied">Inverter safety factor<input data-key="inverterSafety" type="number" min="1" max="2" step="0.05"></label>
+          <label class="field" data-modes="offgrid">Charge controller
+            <select data-key="controllerType" id="controller-type"></select>
+          </label>
+        </div>
+
+        <div data-modes="offgrid hybrid">
+          <h3>Batteries</h3>
+          <div class="grid-3">
+            <label class="field">Chemistry<select data-key="batteryType" id="battery-type"></select></label>
+            <label class="field">Depth of discharge (%)<input data-key="batteryDod" type="number" min="10" max="100" step="1"></label>
+            <label class="field">Round-trip efficiency (%)<input data-key="batteryEfficiency" type="number" min="50" max="100" step="1"></label>
+            <label class="field">Battery voltage (V)<input data-key="batteryUnitVoltage" type="number" min="1" step="0.1"></label>
+            <label class="field">Battery capacity (Ah)<input data-key="batteryUnitAh" type="number" min="1" step="1"></label>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Costs -->
+      <section class="card" id="sec-costs">
+        <h2><span class="step">4</span> Prices <small class="muted">indicative: replace with local quotes</small></h2>
+        <div class="grid-3" id="cost-fields">
+          <label class="field">Currency<input data-cost="currency" type="text" maxlength="5"></label>
+          <label class="field">Panels per Wp<input data-cost="panelPerWp" type="number" min="0" step="0.01"></label>
+          <label class="field">Battery per kWh<input data-cost="batteryPerKWh" type="number" min="0" step="1"></label>
+          <label class="field">Inverter per kW<input data-cost="inverterPerKW" type="number" min="0" step="1"></label>
+          <label class="field">Controller per A<input data-cost="controllerPerA" type="number" min="0" step="0.1"></label>
+          <label class="field">Balance of system (%)<input data-cost="bosPercent" type="number" min="0" step="1"></label>
+          <label class="field">Installation (%)<input data-cost="installPercent" type="number" min="0" step="1"></label>
+          <label class="field">System lifetime (years)<input data-cost="lifetimeYears" type="number" min="1" step="1"></label>
+        </div>
+      </section>
+    </div>
+
+    <!-- Results -->
+    <aside class="results" id="results" aria-live="polite">
+      <section class="card results-card">
+        <h2>Results</h2>
+        <div id="results-body"></div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="wrap site-footer">
+    <p>Results are preliminary estimates for planning. Confirm with equipment datasheets, a site survey and a qualified installer. Irradiance data © NASA POWER and Open-Meteo (CC BY 4.0). Map © OpenStreetMap contributors.</p>
+    <p class="muted">Version <span id="app-version"></span></p>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="js/data.js"></script>
+  <script src="js/sizing.js"></script>
+  <script src="js/irradiance.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
