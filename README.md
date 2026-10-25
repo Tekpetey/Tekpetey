@@ -10,3 +10,7 @@
 Tekpetey/Tekpetey is a ✨ special ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 You can click the Preview link to take a look at your changes.
 --->
+
+## Projects
+
+- ☀️ [**Solar PV Sizer**](https://tekpetey.github.io/Tekpetey/): size off-grid, hybrid and grid-tied solar systems using NASA POWER / Open-Meteo irradiance ([source](solar-pv-sizer/))
